@@ -1,3 +1,4 @@
+#!/bin/bash
 sqlplus -s /nolog << EOF
 CONNECT admin/password;
 
