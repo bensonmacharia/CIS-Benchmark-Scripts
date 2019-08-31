@@ -1,0 +1,1 @@
+sqlplus -s admin/password@server
