@@ -21,7 +21,7 @@ set linesize 200
 set pagesize 200
 set markup html on spool on
 
-Spool Oracle_12c_CIS_Audit_Dump.html
+Spool Oracle_12c_CIS_Audit.html
 
 prompt [Test]: Ensure All Default Passwords Are Changed
 prompt [Query] : SELECT USERNAME FROM DBA_USERS_WITH_DEFPWD WHERE USERNAME NOT LIKE '%XS$NULL%';

@@ -1,1 +1,16 @@
-sqlplus -s admin/password@server
+
+AUDIT
+---------------------------
+#Oracle_12c_Audit_Script.sh
+1. Run ~$Oracle_12c_Audit_Script.sh -u <dbuser> -p <dbpassword> -s <dbsid>
+2. The script will create a file Oracle_12c_CIS_Audit_Dump.html with the audit findings.
+ 
+#Oracle_12c_Audit_Script.sql
+1. Run sqlplus -s <dbuser>/<dbpassword>@<dbsid>
+2. The script will create a file Oracle_12c_CIS_Audit_Dump.html with the audit findings.
+
+
+
+REMEDIATION
+---------------------------
+
