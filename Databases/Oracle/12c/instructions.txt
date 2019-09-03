@@ -1,16 +1,28 @@
 
 AUDIT
 ---------------------------
-#Oracle_12c_Audit_Script.sh
-1. Run ~$Oracle_12c_Audit_Script.sh -u <dbuser> -p <dbpassword> -s <dbsid>
-2. The script will create a file Oracle_12c_CIS_Audit_Dump.html with the audit findings.
+#audit.sh
+1. Run ~$audit.sh -u <dbuser> -p <dbpassword> -s <dbsid>
+2. The script will generate a file Oracle_12c_CIS_Audit.html with the audit findings.
  
 #Oracle_12c_Audit_Script.sql
-1. Run sqlplus -s <dbuser>/<dbpassword>@<dbsid>
-2. The script will create a file Oracle_12c_CIS_Audit_Dump.html with the audit findings.
+1. Run ~$sqlplus -s <dbuser>/<dbpassword>@<dbsid> @Oracle_12c_Audit_Script.sql
+2. The script will generate a file Oracle_12c_CIS_Audit.html with the audit findings.
+
+Oracle_12c_CIS_Audit file:
+- [Test]:            The control being tested as titled in specific CIS Bencmark
+- [Manual Test]:     Control that needs to be tested manualy e.g. by examining the listener.ora file
+- [Query]:           Specific query that is run on the database to check if test control is in place.
+- [Output]:          Output received from running the control test
+- [Expected Output]: Result expected for a control to be regarded compliant or to pass the test.
+- [Remediation]:     Specific action needed to be done to make a configuration compliant to a specific check.
 
 
 
 REMEDIATION
 ---------------------------
+
+
+
+
 

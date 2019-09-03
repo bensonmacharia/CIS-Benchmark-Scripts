@@ -20,13 +20,22 @@ set linesize 200
 set pagesize 200
 set markup html on spool on
 
-Spool Oracle_12c_CIS_Remediation_Dump.html
+Spool Oracle_12c_CIS_Remediation.html
 
 prompt [Test]: Ensure All Default Passwords Are Changed
-prompt [Query] : SELECT USERNAME FROM DBA_USERS_WITH_DEFPWD WHERE USERNAME NOT LIKE '%XS$NULL%';
-prompt [Expected Output]: Empty Result
 prompt [Remediation]: For each username run PASSWORD <username> 
-SELECT USERNAME FROM DBA_USERS_WITH_DEFPWD WHERE USERNAME NOT LIKE '%XS$NULL%';
+begin 
+for r_user in 
+(select username from dba_users_with_defpwd where username not like '%XS$NULL%') 
+loop 
+DBMS_OUTPUT.PUT_LINE('Password for user '||r_user.username||' will be changed.'); 
+execute immediate 'alter user "'||r_user.username||'" identified by 
+"'||DBMS_RANDOM.string('a',16)||'"account lock password expire'; 
+end loop; 
+end; 
+/  
+
+/*
 
 prompt [Test]: Ensure All Sample Data And Users Have Been Removed 
 prompt [Query] : SELECT USERNAME FROM ALL_USERS WHERE USERNAME IN ('BI','HR','IX','OE','PM','SCOTT','SH');
@@ -739,6 +748,8 @@ prompt [Query] : SELECT AUDIT_OPTION, SUCCESS, FAILURE FROM DBA_STMT_AUDIT_OPTS 
 prompt [Expected Output]: Some results expected
 prompt [Remediation]: AUDIT SESSION;
 SELECT AUDIT_OPTION, SUCCESS, FAILURE FROM DBA_STMT_AUDIT_OPTS WHERE AUDIT_OPTION='CREATE SESSION' AND USER_NAME IS NULL AND PROXY_NAME IS NULL AND SUCCESS = 'BY ACCESS' AND FAILURE = 'BY ACCESS'; 
+
+*/
 
 prompt end of script
 spool off
