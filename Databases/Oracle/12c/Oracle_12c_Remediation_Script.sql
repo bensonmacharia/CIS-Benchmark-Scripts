@@ -37,6 +37,14 @@ end;
 prompt [Output After]:
 SELECT USERNAME FROM DBA_USERS_WITH_DEFPWD WHERE USERNAME NOT LIKE '%XS$NULL%';
 prompt [Expected Output]: Empty Result 
+prompt -----------------------------------------
+
+prompt [Test]: Ensure All Sample Data And Users Have Been Removed 
+prompt [Remediation]: Execute $ORACLE_HOME/demo/schema/drop_sch.sql and then DROP USER SCOTT CASCADE;
+prompt [Output After]:
+SELECT USERNAME FROM ALL_USERS WHERE USERNAME IN ('BI','HR','IX','OE','PM','SCOTT','SH');
+prompt [Expected Output]: Empty Result
+prompt -----------------------------------------
 
 /*
 
@@ -754,6 +762,7 @@ SELECT AUDIT_OPTION, SUCCESS, FAILURE FROM DBA_STMT_AUDIT_OPTS WHERE AUDIT_OPTIO
 
 */
 
-prompt end of script
+prompt end of script. Thank you. 
+prompt https://github.com/bensonmacharia/CIS-Benchmark-Scripts
 spool off
 set markup html off
