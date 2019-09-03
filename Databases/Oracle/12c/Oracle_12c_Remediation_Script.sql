@@ -33,7 +33,10 @@ execute immediate 'alter user "'||r_user.username||'" identified by
 "'||DBMS_RANDOM.string('a',16)||'"account lock password expire'; 
 end loop; 
 end; 
-/  
+/ 
+prompt [Output After]:
+SELECT USERNAME FROM DBA_USERS_WITH_DEFPWD WHERE USERNAME NOT LIKE '%XS$NULL%';
+prompt [Expected Output]: Empty Result 
 
 /*
 
