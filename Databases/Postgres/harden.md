@@ -1,177 +1,235 @@
-# PostgreSQL CIS Benchmark Hardening Guide (Step-by-Step)
+# PostgreSQL CIS Benchmark Hardening Guide
 
-This guide provides **step-by-step instructions to harden a PostgreSQL database** based on the **CIS PostgreSQL Benchmark**. It includes all major areas: authentication, access control, auditing/logging, encryption, and configuration.
+This guide provides **step-by-step instructions to harden a PostgreSQL database** based on the **CIS PostgreSQL Benchmark**.
 
 ---
 
 ## 1. Secure Authentication & Password Policies
 
-**Goal:** Enforce strong passwords and secure user accounts.
+**Goal:** Enforce strong authentication and prevent credential abuse.
 
-### Steps:
-1. **Set strong passwords for all roles:**
+### Steps
+
+1. Enable SCRAM-SHA-256 password encryption:
+```ini
+password_encryption = scram-sha-256
+```
+
+2. Set strong passwords:
 ```sql
 ALTER ROLE postgres WITH PASSWORD 'Str0ngP@ssw0rd!';
 ```
-2. **Check all users and passwords:**
-```sql
-\du
-```
-3. **Remove or rename default accounts:**
+
+3. Rename default superuser:
 ```sql
 ALTER ROLE postgres RENAME TO admin;
 ```
-4. **Set password expiration:**
+
+4. Set password expiration:
 ```sql
 ALTER ROLE appuser VALID UNTIL '2026-02-14';
 ```
 
-### Check:
+5. Enforce password authentication:
+```text
+host    all    all    0.0.0.0/0    scram-sha-256
+```
+
+### Check
 ```sql
+SHOW password_encryption;
 SELECT rolname, rolvaliduntil FROM pg_authid;
 ```
-**Expected Result:** All roles have strong passwords and expiration dates set.
+
+**Expected Result:**  
+All roles use SCRAM-SHA-256 with expiration dates and no trust authentication.
 
 ---
 
 ## 2. Restrict Access / Principle of Least Privilege
 
-**Goal:** Limit user privileges and control access.
+**Goal:** Ensure users only have the minimum permissions required.
 
-### Steps:
-1. **Grant minimal privileges:**
+### Steps
+
+1. Revoke default PUBLIC privileges:
 ```sql
-GRANT SELECT, INSERT, UPDATE ON DATABASE mydb TO appuser;
+REVOKE ALL ON DATABASE mydb FROM public;
+REVOKE ALL ON SCHEMA public FROM public;
 ```
-2. **Revoke unnecessary privileges:**
+
+2. Grant minimal access:
 ```sql
-REVOKE ALL PRIVILEGES ON DATABASE mydb FROM public;
+GRANT CONNECT ON DATABASE mydb TO appuser;
+GRANT USAGE ON SCHEMA public TO appuser;
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO appuser;
 ```
-3. **Restrict remote access in `pg_hba.conf`:**
+
+3. Restrict network access:
 ```text
-# Allow only specific IPs
-host    mydb    appuser    192.168.1.0/24    md5
-```
-4. **Reload configuration:**
-```bash
-SELECT pg_reload_conf();
+host    mydb    appuser    192.168.1.0/24    scram-sha-256
 ```
 
-### Check:
+### Check
 ```sql
 \du
+\dp
 ```
-**Expected Result:** Users have only required privileges; unnecessary roles removed.
+
+**Expected Result:**  
+Users have only explicitly granted privileges; PUBLIC access is removed.
 
 ---
 
-## 3. Enable Logging & Auditing
+## 3. Logging & Auditing
 
-**Goal:** Track user activity, login attempts, and DDL/DML changes.
+**Goal:** Capture authentication, DDL, and data access events.
 
-### Steps:
-1. **Enable standard logging in `postgresql.conf`:**
+### Steps
+
+1. Enable logging:
 ```ini
 logging_collector = on
-log_directory = 'pg_log'
-log_filename = 'postgresql-%Y-%m-%d.log'
-log_statement = 'ddl'
 log_connections = on
 log_disconnections = on
+log_statement = 'ddl'
+log_line_prefix = '%m %u %d %r %p '
 ```
-2. **Install and configure `pgaudit` (optional, for detailed auditing):**
+
+2. Install pgaudit:
 ```sql
 CREATE EXTENSION pgaudit;
 ```
-3. **Set pgaudit logging:**
-```sql
-SET pgaudit.log = 'all';
+
+3. Enable pgaudit:
+```ini
+shared_preload_libraries = 'pgaudit'
+pgaudit.log = 'read, write, ddl, role'
 ```
 
-### Check:
-- Verify logs exist in `pg_log/`  
-- Ensure pgaudit entries appear for role activities.  
-**Expected Result:** Logs capture login, DDL, DML, and administrative activity.
+### Check
+```sql
+SHOW logging_collector;
+SHOW shared_preload_libraries;
+```
+
+**Expected Result:**  
+All connection attempts, DDL, and audited actions appear in logs.
 
 ---
 
-## 4. Encrypt Data in Transit & at Rest
+## 4. Encrypt Data in Transit & At Rest
 
-**Goal:** Protect sensitive data from interception or compromise.
+**Goal:** Protect data confidentiality.
 
-### Steps:
-1. **Enable SSL for client connections:**
-- Generate certificates:
-```bash
-# Generate CA
-openssl genrsa -out rootCA.key 2048
-openssl req -x509 -new -nodes -key rootCA.key -days 3650 -out rootCA.crt
+### Steps
 
-# Generate server key and certificate
-openssl genrsa -out server.key 2048
-openssl req -new -key server.key -out server.csr
-openssl x509 -req -in server.csr -CA rootCA.crt -CAkey rootCA.key -CAcreateserial -out server.crt -days 3650
-chmod 600 server.key
-```
-2. **Configure `postgresql.conf` for SSL:**
+1. Enable SSL:
 ```ini
 ssl = on
-ssl_cert_file = '/path/to/server.crt'
-ssl_key_file = '/path/to/server.key'
-ssl_ca_file = '/path/to/rootCA.crt'
-```
-3. **Require SSL in `pg_hba.conf`:**
-```text
-hostssl mydb appuser 192.168.1.0/24 md5
-```
-4. **Restart PostgreSQL:**
-```bash
-sudo systemctl restart postgresql
 ```
 
-### Check:
+2. Require encrypted connections:
+```text
+hostssl    all    all    0.0.0.0/0    scram-sha-256
+```
+
+3. Use encrypted storage or pgcrypto:
+```sql
+CREATE EXTENSION pgcrypto;
+```
+
+### Check
 ```sql
 SHOW ssl;
+SELECT * FROM pg_stat_ssl;
 ```
-**Expected Result:** SSL is enabled; connections require encryption.
 
-5. **Optional Data-at-Rest Encryption:**  
-- Use filesystem-level encryption (LUKS, encrypted partitions) or column-level encryption with `pgcrypto`:
-```sql
-CREATE TABLE sensitive (
-  id SERIAL,
-  data TEXT,
-  encrypted_data BYTEA
-);
-INSERT INTO sensitive (data, encrypted_data) VALUES ('secret', pgp_sym_encrypt('secret','encryption_key'));
-```
+**Expected Result:**  
+All client connections are encrypted; sensitive data is protected at rest.
 
 ---
 
 ## 5. Secure Configuration & Patch Management
 
-**Goal:** Harden configuration and ensure PostgreSQL is up-to-date.
+**Goal:** Reduce attack surface and maintain secure defaults.
 
-### Steps:
-1. **Bind PostgreSQL to trusted interfaces:**
+### Steps
+
+1. Bind to trusted interfaces:
 ```ini
 listen_addresses = 'localhost'
 ```
-2. **Disable unused extensions:**
+
+2. Remove unused extensions:
 ```sql
 DROP EXTENSION IF EXISTS dblink;
 DROP EXTENSION IF EXISTS adminpack;
 ```
-3. **Remove test databases:**
-```sql
-DROP DATABASE IF EXISTS test;
-```
-4. **Apply OS and PostgreSQL updates regularly:**
+
+3. Apply updates:
 ```bash
 sudo apt update && sudo apt upgrade postgresql
 ```
-5. **Check configuration parameters:**
+
+### Check
 ```sql
-SHOW all;
+SHOW listen_addresses;
 ```
-**Expected Result:** Only necessar
+
+**Expected Result:**  
+PostgreSQL listens only on trusted interfaces and runs up-to-date software.
+
+---
+
+## 6. Backup Security
+
+**Goal:** Ensure backups are protected and recoverable.
+
+### Steps
+
+1. Encrypt backups:
+```bash
+pg_dump mydb | gpg --symmetric --cipher-algo AES256 > mydb.sql.gpg
+```
+
+2. Restrict permissions:
+```bash
+chmod 600 mydb.sql.gpg
+```
+
+### Check
+```bash
+ls -l mydb.sql.gpg
+```
+
+**Expected Result:**  
+Backups are encrypted, access-controlled, and restorable.
+
+---
+
+## 7. Monitoring & Activity Review
+
+**Goal:** Detect suspicious or unauthorized activity.
+
+### Steps
+
+1. Enable activity tracking:
+```ini
+track_activities = on
+```
+
+2. Monitor sessions:
+```sql
+SELECT * FROM pg_stat_activity;
+```
+
+### Check
+```sql
+SHOW track_activities;
+```
+
+**Expected Result:**  
+Administrators can review active and historical database activity.
+
+---

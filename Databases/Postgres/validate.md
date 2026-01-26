@@ -1,258 +1,274 @@
-# MySQL CIS Benchmark Validation & Testing Guide
+# PostgreSQL CIS Benchmark Validation Guide
 
-This guide provides **step-by-step instructions to validate and test** MySQL hardening based on the CIS benchmark. For each check, the query/command, explanation of results, and recommended fix are provided.
+This document provides **validation and verification steps** to confirm that a PostgreSQL database is hardened according to the **CIS PostgreSQL Benchmark**.  
+Each section follows the format: **Control Objective → Validation Steps → Expected Result**.
 
----
-
-## 1. Verify Root/Admin User Password Strength
-**Query:**
-```sql
-SELECT User, Host, authentication_string FROM mysql.user WHERE User='root';
-```
-**Explanation:**
-- Empty or weak passwords indicate insecure accounts.
-**Recommendation:**
-```sql
-ALTER USER 'root'@'localhost' IDENTIFIED WITH caching_sha2_password BY 'StrongP@ssw0rd!';
-```
+Applies to PostgreSQL 12+
 
 ---
 
-## 2. Check for Default or Anonymous Accounts
-**Query:**
+## 1. Authentication & Password Security Validation
+
+### Control Objective
+Ensure strong authentication mechanisms are enforced and weak authentication is disabled.
+
+### Validation Steps
+
+1. Verify password encryption method:
 ```sql
-SELECT User, Host FROM mysql.user;
+SHOW password_encryption;
 ```
-**Explanation:**
-- Default accounts (`root@%`, anonymous users) pose a security risk.
-**Recommendation:**
+
+2. Verify no roles use expired or NULL passwords:
 ```sql
-DROP USER 'test'@'localhost';
-RENAME USER 'root'@'%' TO 'admin'@'localhost';
+SELECT rolname, rolvaliduntil FROM pg_authid;
 ```
 
----
-
-## 3. Verify User Privileges (Least Privilege)
-**Query:**
-```sql
-SHOW GRANTS FOR 'username'@'host';
-```
-**Explanation:**
-- Users with excessive privileges (e.g., GRANT ALL) violate least privilege.
-**Recommendation:**
-```sql
-GRANT SELECT, INSERT, UPDATE ON mydb.* TO 'appuser'@'localhost';
-```
-
----
-
-## 4. Check Password Expiration Policy
-**Query:**
-```sql
-SELECT User, Host, password_expired FROM mysql.user;
-```
-**Explanation:**
-- Passwords that never expire are insecure.
-**Recommendation:**
-```sql
-ALTER USER 'appuser'@'localhost' PASSWORD EXPIRE INTERVAL 90 DAY;
-```
-
----
-
-## 5. Verify Logging (General, Error, Slow Query)
-**Commands:**
-```sql
-SHOW VARIABLES LIKE 'general_log';
-SHOW VARIABLES LIKE 'log_error';
-SHOW VARIABLES LIKE 'slow_query_log';
-```
-**Explanation:**
-- Disabled logs prevent tracking of activity and errors.
-**Recommendation:**
-```ini
-[mysqld]
-general_log = ON
-log_error = /var/log/mysql/error.log
-slow_query_log = ON
-slow_query_log_file = /var/log/mysql/slow.log
-long_query_time = 2
-```
-
----
-
-## 6. Check Audit Plugin
-**Query:**
-```sql
-SELECT * FROM information_schema.plugins WHERE PLUGIN_NAME='audit_log';
-```
-**Explanation:**
-- Missing plugin means activity is not audited.
-**Recommendation:**
-```sql
-INSTALL PLUGIN audit_log SONAME 'audit_log.so';
-```
-
----
-
-## 7. Verify SSL/TLS Configuration
-**Query:**
-```sql
-SHOW VARIABLES LIKE '%ssl%';
-SHOW STATUS LIKE 'Ssl_cipher';
-```
-**Explanation:**
-- Empty SSL cipher or `have_ssl = DISABLED` indicates unencrypted connections.
-**Recommendation:**
-```ini
-[mysqld]
-ssl-ca=/etc/mysql/ssl/ca-cert.pem
-ssl-cert=/etc/mysql/ssl/server-cert.pem
-ssl-key=/etc/mysql/ssl/server-key.pem
-```
-```sql
-ALTER USER 'appuser'@'localhost' REQUIRE SSL;
-```
-
----
-
-## 8. Verify Data-at-Rest Encryption
-**Query:**
-```sql
-SHOW VARIABLES LIKE 'innodb_encrypt_tables';
-```
-**Explanation:**
-- OFF indicates tablespaces are unencrypted.
-**Recommendation:**
-```ini
-[mysqld]
-encrypt-tables = ON
-```
-- Encrypt backups using `mysqldump + gpg`.
-
----
-
-## 9. Verify bind-address
-**Query:**
-```sql
-SHOW VARIABLES LIKE 'bind_address';
-```
-**Explanation:**
-- `0.0.0.0` exposes MySQL to all interfaces.
-**Recommendation:**
-```ini
-[mysqld]
-bind-address = 127.0.0.1
-```
-
----
-
-## 10. Check for Test Database
-**Query:**
-```sql
-SHOW DATABASES LIKE 'test';
-```
-**Explanation:**
-- Test database presence is a security risk.
-**Recommendation:**
-```sql
-DROP DATABASE test;
-```
-
----
-
-## 11. Check Unused Plugins
-**Query:**
-```sql
-SELECT PLUGIN_NAME, PLUGIN_STATUS FROM information_schema.plugins;
-```
-**Explanation:**
-- Unused plugins increase attack surface.
-**Recommendation:**
-```sql
-UNINSTALL PLUGIN plugin_name;
-```
-
----
-
-## 12. Verify Symbolic Links Disabled
-**Query:**
-```sql
-SHOW VARIABLES LIKE 'symbolic-links';
-```
-**Explanation:**
-- ON allows filesystem exploitation via symlinks.
-**Recommendation:**
-```ini
-[mysqld]
-symbolic-links=0
-```
-
----
-
-## 13. Verify TLS Version Enforcement
-**Query:**
-```sql
-SHOW VARIABLES LIKE 'ssl_cipher';
-```
-**Explanation:**
-- Weak TLS (1.0/1.1) is insecure.
-**Recommendation:**
-```ini
-[mysqld]
-ssl-cipher=TLS_AES_256_GCM_SHA384
-```
-
----
-
-## 14. Check Secure File Privileges
-**Query:**
-```sql
-SHOW VARIABLES LIKE 'secure_file_priv';
-```
-**Explanation:**
-- Empty or unrestricted path allows arbitrary file access.
-**Recommendation:**
-```ini
-[mysqld]
-secure_file_priv=/var/lib/mysql-files
-```
-
----
-
-## 15. Verify Patch Level
-**Query:**
-```sql
-SELECT VERSION();
-```
-**Explanation:**
-- Outdated versions may have known vulnerabilities.
-**Recommendation:**
+3. Verify no `trust` authentication is configured:
 ```bash
-sudo apt update && sudo apt upgrade mysql-server
+grep -i trust pg_hba.conf
 ```
+
+### Expected Result
+- `password_encryption` is set to `scram-sha-256`
+- No roles have NULL passwords
+- No `trust` entries exist in `pg_hba.conf`
 
 ---
 
-## 16. Audit Table Privileges
-**Query:**
+## 2. Least Privilege & Access Control Validation
+
+### Control Objective
+Ensure users and roles have only the minimum required privileges.
+
+### Validation Steps
+
+1. List all roles:
 ```sql
-SELECT * FROM mysql.tables_priv;
-```
-**Explanation:**
-- Excessive privileges on critical tables are risky.
-**Recommendation:**
-```sql
-REVOKE INSERT, UPDATE, DELETE ON mydb.sensitive_table FROM 'user'@'host';
+\du
 ```
 
----
+2. Verify PUBLIC role has no unnecessary privileges:
+```sql
+\dp
+```
 
-## 17. Verify Secure Backups
-**Explanation:**
-- Unencrypted backups may leak sensitive data.
-**Recommendation:**
+3. Verify database-level privileges:
+```sql
+SELECT datname, datacl FROM pg_database;
+```
+
+4. Verify restricted network access:
 ```bash
-mysqldump -u root -p mydb | gpg --symmetric --cipher-algo AES256 -o mydb.sql.gpg
+cat pg_hba.conf
 ```
+
+### Expected Result
+- No excessive superuser roles
+- PUBLIC role has no privileges on databases or schemas
+- Access is restricted by IP and role
+
+---
+
+## 3. Logging & Auditing Validation
+
+### Control Objective
+Ensure sufficient logging and auditing is enabled for accountability.
+
+### Validation Steps
+
+1. Verify logging parameters:
+```sql
+SHOW logging_collector;
+SHOW log_connections;
+SHOW log_disconnections;
+SHOW log_statement;
+```
+
+2. Verify pgaudit is installed:
+```sql
+SELECT * FROM pg_extension WHERE extname = 'pgaudit';
+```
+
+3. Verify pgaudit configuration:
+```sql
+SHOW shared_preload_libraries;
+SHOW pgaudit.log;
+```
+
+4. Verify logs are generated:
+```bash
+ls -l pg_log/
+```
+
+### Expected Result
+- Logging is enabled
+- pgaudit is active
+- Audit entries appear for DDL and DML actions
+
+---
+
+## 4. Encryption in Transit Validation
+
+### Control Objective
+Ensure all client connections use encrypted channels.
+
+### Validation Steps
+
+1. Verify SSL is enabled:
+```sql
+SHOW ssl;
+```
+
+2. Verify active connections are encrypted:
+```sql
+SELECT pid, usename, ssl FROM pg_stat_ssl;
+```
+
+3. Verify SSL enforcement in pg_hba.conf:
+```bash
+grep hostssl pg_hba.conf
+```
+
+### Expected Result
+- SSL is enabled
+- All active connections use SSL
+- `hostssl` rules are enforced
+
+---
+
+## 5. Encryption at Rest Validation
+
+### Control Objective
+Ensure sensitive data and backups are protected at rest.
+
+### Validation Steps
+
+1. Verify filesystem encryption (OS-level):
+```bash
+lsblk -f
+```
+
+2. Verify pgcrypto extension if used:
+```sql
+SELECT * FROM pg_extension WHERE extname = 'pgcrypto';
+```
+
+3. Verify backups are encrypted:
+```bash
+file mydb.sql.gpg
+```
+
+### Expected Result
+- Database storage uses encrypted disks OR
+- Sensitive columns are encrypted
+- Backup files are encrypted
+
+---
+
+## 6. Secure Configuration Validation
+
+### Control Objective
+Ensure PostgreSQL is configured with secure defaults.
+
+### Validation Steps
+
+1. Verify listening interfaces:
+```sql
+SHOW listen_addresses;
+```
+
+2. Verify Unix socket permissions:
+```sql
+SHOW unix_socket_permissions;
+```
+
+3. Verify unused extensions are removed:
+```sql
+SELECT extname FROM pg_extension;
+```
+
+4. Verify configuration file permissions:
+```bash
+ls -l postgresql.conf pg_hba.conf
+```
+
+### Expected Result
+- PostgreSQL listens only on trusted interfaces
+- Configuration files are restricted to postgres user
+- Only required extensions are installed
+
+---
+
+## 7. Patch & Version Management Validation
+
+### Control Objective
+Ensure PostgreSQL is running a supported and patched version.
+
+### Validation Steps
+
+1. Verify PostgreSQL version:
+```sql
+SELECT version();
+```
+
+2. Verify OS patch status:
+```bash
+apt list --upgradable | grep postgres
+```
+
+### Expected Result
+- PostgreSQL version is supported
+- Latest security patches are applied
+
+---
+
+## 8. Backup & Recovery Validation
+
+### Control Objective
+Ensure backups are secure and restorable.
+
+### Validation Steps
+
+1. Verify backup permissions:
+```bash
+ls -l mydb.sql.gpg
+```
+
+2. Test backup restore:
+```bash
+gpg -d mydb.sql.gpg | psql test_restore
+```
+
+### Expected Result
+- Backups are encrypted
+- Backups are accessible only to authorized users
+- Restore operations succeed
+
+---
+
+## 9. Monitoring & Activity Review Validation
+
+### Control Objective
+Ensure database activity can be monitored and reviewed.
+
+### Validation Steps
+
+1. Verify activity tracking:
+```sql
+SHOW track_activities;
+```
+
+2. Review active sessions:
+```sql
+SELECT * FROM pg_stat_activity;
+```
+
+3. Verify log centralization (if applicable):
+- Check SIEM or log aggregation platform
+
+### Expected Result
+- Activity tracking is enabled
+- Administrators can detect suspicious behavior
+
+---
